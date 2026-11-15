@@ -3,7 +3,7 @@ import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import { dirname, join } from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, Logger, Queue, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Root } from "../src/domain.ts";
 import { Lark } from "../src/lark.ts";
@@ -79,6 +79,22 @@ it.live(
       expect(() => process.kill(Number(leader), 0)).toThrow();
       expect(() => process.kill(Number(descendant), 0)).toThrow();
     }),
+);
+
+it.live("logs CLI diagnostics after readiness while continuing to consume events", () =>
+  Effect.gen(function* () {
+    const logs = yield* Queue.unbounded<Logger.Options<unknown>>();
+    const logger = Logger.make((options) => Queue.offerUnsafe(logs, options));
+    yield* Effect.gen(function* () {
+      const f = yield* fixture({ mode: "consume" });
+      const source = yield* f.lark.open();
+      const messages = yield* source.pipe(Stream.take(2), Stream.runCollect);
+      const diagnostic = yield* Queue.take(logs);
+      expect(diagnostic.message).toEqual(["after readiness"]);
+      expect(diagnostic.logLevel).toBe("Info");
+      expect(messages).toHaveLength(2);
+    }).pipe(Effect.provide(Logger.layer([logger])));
+  }),
 );
 
 it.live("fails on exit before readiness even with zero status and rejects malformed event JSON", () =>

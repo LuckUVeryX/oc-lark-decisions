@@ -66,7 +66,7 @@ export class Lark extends Context.Service<
               Stream.runForEach((line) =>
                 line === "[event] ready event_key=im.message.receive_v1"
                   ? Deferred.succeed(ready, undefined)
-                  : Effect.void,
+                  : Effect.logInfo(line),
               ),
               Effect.catch((cause) => Deferred.fail(ready, new LarkError({ operation: "stderr", cause }))),
               Effect.forkScoped,
