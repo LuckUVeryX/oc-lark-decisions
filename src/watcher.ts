@@ -17,7 +17,7 @@ interface Pending {
   deadline: number;
 }
 interface Work {
-  readonly scope: Scope.Closeable;
+  readonly scope: Scope.Scope;
   readonly close: Effect.Effect<void>;
   readonly sessionID: Session.ID;
   readonly pending: Map<string, Pending>;
