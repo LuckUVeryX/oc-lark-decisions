@@ -232,6 +232,45 @@ it.effect("switch cancels and awaits blocked queue admission, clears timers, and
   }),
 );
 
+it.effect("disposal during switch awaits blocked queue cleanup", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>();
+    const cleaning = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    const cleaned = yield* Deferred.make<void>();
+    const h = yield* harness({
+      queue: () =>
+        Deferred.succeed(entered, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.ensuring(
+            Deferred.succeed(cleaning, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+              Effect.andThen(Deferred.succeed(cleaned, undefined)),
+            ),
+          ),
+        ),
+    });
+    yield* Effect.gen(function* () {
+      yield* h.start();
+      yield* h.send(incoming());
+      yield* TestClock.adjust(15_000);
+      yield* Deferred.await(entered);
+      const switching = yield* h.watcher.toggle(sessionB).pipe(Effect.forkScoped);
+      yield* Deferred.await(cleaning);
+      const disposing = yield* h.dispose.pipe(Effect.forkScoped);
+      yield* TestClock.adjust(0);
+      expect(yield* Deferred.isDone(cleaned)).toBe(false);
+      expect(disposing.pollUnsafe()).toBeUndefined();
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(disposing);
+      yield* Fiber.join(switching);
+      expect(yield* Deferred.isDone(cleaned)).toBe(true);
+      expect(yield* h.watcher.status()).toEqual({ state: "stopped" });
+      expect(yield* Ref.get(h.closed)).toBe(1);
+    }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
+  }),
+);
+
 it.effect("stops interruptible startup, source failure, and plugin disposal", () =>
   Effect.gen(function* () {
     const h = yield* harness({ startup: Effect.never });
