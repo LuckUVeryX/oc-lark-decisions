@@ -18,6 +18,7 @@ interface Pending {
 }
 interface Work {
   readonly scope: Scope.Closeable;
+  readonly close: Effect.Effect<void>;
   readonly sessionID: Session.ID;
   readonly pending: Map<string, Pending>;
   activeWorkers: number;
@@ -138,8 +139,10 @@ export class Watcher extends Context.Service<
         }, lifecycle.withPermit);
 
         const makeWork = Effect.fn("Watcher.makeWork")(function* (scope: Scope.Scope, sessionID: Session.ID) {
+          const workScope = yield* Scope.fork(scope);
           const work: Work = {
-            scope: yield* Scope.fork(scope),
+            scope: workScope,
+            close: yield* Effect.cached(Scope.close(workScope, Exit.void)),
             sessionID,
             pending: new Map(),
             activeWorkers: 0,
@@ -168,6 +171,7 @@ export class Watcher extends Context.Service<
               Effect.ensuring(
                 Effect.gen(function* () {
                   watch.closed = true;
+                  yield* watch.work.close;
                   yield* Scope.close(watch.scope, Exit.void);
                   if (current?.watch === watch) current = undefined;
                 }),
@@ -189,7 +193,7 @@ export class Watcher extends Context.Service<
             }
             yield* Effect.uninterruptible(
               Effect.gen(function* () {
-                yield* Scope.close(running.watch.work.scope, Exit.void);
+                yield* running.watch.work.close;
                 if (running.watch.closed) {
                   yield* Fiber.await(running.controller);
                   return;
