@@ -55,7 +55,9 @@ export const larkLayer = Layer.effect(
       open: Effect.fn("Lark.open")(function* () {
         const process = yield* spawner
           .spawn(
-            ChildProcess.make("lark-cli", ["event", "consume", "im.message.receive_v1"], { stdin: "pipe" }),
+            ChildProcess.make("lark-cli", ["event", "consume", "im.message.receive_v1", "--as", "bot"], {
+              stdin: "pipe",
+            }),
           )
           .pipe(Effect.mapError(error("open")));
         const ready = yield* Deferred.make<void, LarkError>();

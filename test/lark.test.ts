@@ -9,6 +9,7 @@ it.live("owns the real CLI process, recognizes readiness, decodes NDJSON, and aw
     const scope = yield* Scope.fork(yield* Scope.Scope);
     const { lark, directory, fs } = yield* controlledCLI(`
 if [ "$1" = event ]; then
+  printf '%s\\n' "$@" > "$(dirname "$0")/event-args"
   trap 'printf cleaned > "$(dirname "$0")/cleaned"; exit 0' TERM
   printf '[event] ready event_key=im.message.receive_v1\\n' >&2
   printf '%s\\n' '{"type":"im.message.receive_v1","chat_id":"chat","message_id":"message","root_id":"root","thread_id":"thread","content":"rendered"}'
@@ -17,6 +18,9 @@ else
   printf '%s\\n' '{"ok":true,"data":{"items":[{"message_id":"message","body":{"content":"{\\"text\\":\\"raw\\"}"}}],"has_more":true}}'
 fi`);
     const stream = yield* lark.open().pipe(Scope.provide(scope));
+    expect(yield* fs.readFileString(`${directory}/event-args`)).toBe(
+      "event\nconsume\nim.message.receive_v1\n--as\nbot\n",
+    );
     const events = yield* stream.pipe(Stream.take(1), Stream.runCollect);
     expect(events).toEqual([
       {
