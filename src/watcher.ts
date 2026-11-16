@@ -47,16 +47,16 @@ export class Watcher extends Context.Service<
         const lifecycle = yield* Semaphore.make(1);
         let current: { readonly watch: Watch; readonly controller: Fiber.Fiber<void> } | undefined;
 
-        const status = Effect.fn("Watcher.status")(function* (): Effect.fn.Return<WatchStatus> {
-          return yield* Effect.sync(() =>
+        const status = Effect.fn("Watcher.status")(() =>
+          Effect.sync<WatchStatus>(() =>
             current === undefined
-              ? ({ state: "stopped" } satisfies WatchStatus)
-              : ({
+              ? { state: "stopped" }
+              : {
                   state: current.watch.phase,
                   sessionID: current.watch.work.sessionID,
-                } satisfies WatchStatus),
-          );
-        });
+                },
+          ),
+        );
 
         const triage = Effect.fn("Watcher.triage")(
           function* (batch: Batch, sessionID: Session.ID) {
@@ -223,14 +223,10 @@ export class Watcher extends Context.Service<
         yield* native.deletedSessions.pipe(
           Stream.runForEach(
             Effect.fn("Watcher.deleted")(function* (sessionID) {
-              yield* lifecycle.withPermit(
-                Effect.gen(function* () {
-                  if (current?.watch.work.sessionID === sessionID) {
-                    yield* Fiber.interrupt(current.controller);
-                  }
-                }),
-              );
-            }),
+              if (current?.watch.work.sessionID === sessionID) {
+                yield* Fiber.interrupt(current.controller);
+              }
+            }, lifecycle.withPermit),
           ),
           Effect.catch((error) => Effect.logError("Lark session deletion listener stopped", error)),
           Effect.forkScoped,

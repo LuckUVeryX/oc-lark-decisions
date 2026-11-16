@@ -21,23 +21,20 @@ export class OpenCode extends Context.Service<
   }
 >()("oc-lark-relay/OpenCode") {
   static readonly layer = (ctx: Native) =>
-    Layer.effect(
-      OpenCode,
-      Effect.gen(function* () {
-        return OpenCode.of({
-          requireSession: Effect.fn("OpenCode.requireSession")(function* (sessionID) {
-            yield* ctx.session.get({ sessionID });
-          }),
-          decide: Effect.fn("OpenCode.decide")(function* (request) {
-            return yield* ctx.experimental.generate.decisions(request);
-          }),
-          queue: Effect.fn("OpenCode.queue")(function* (sessionID, payload) {
-            yield* ctx.session.prompt({ sessionID, text: JSON.stringify(payload), delivery: "queue" });
-          }),
-          deletedSessions: ctx.event
-            .subscribe({ types: ["session.deleted"] })
-            .pipe(Stream.map((event) => event.data.sessionID)),
-        });
+    Layer.sync(OpenCode, () =>
+      OpenCode.of({
+        requireSession: Effect.fn("OpenCode.requireSession")((sessionID) =>
+          ctx.session.get({ sessionID }).pipe(Effect.asVoid),
+        ),
+        decide: Effect.fn("OpenCode.decide")((request) => ctx.experimental.generate.decisions(request)),
+        queue: Effect.fn("OpenCode.queue")((sessionID, payload) =>
+          ctx.session
+            .prompt({ sessionID, text: JSON.stringify(payload), delivery: "queue" })
+            .pipe(Effect.asVoid),
+        ),
+        deletedSessions: ctx.event
+          .subscribe({ types: ["session.deleted"] })
+          .pipe(Stream.map((event) => event.data.sessionID)),
       }),
     );
 }

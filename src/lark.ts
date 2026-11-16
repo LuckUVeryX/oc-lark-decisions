@@ -116,24 +116,20 @@ export class Lark extends Context.Service<
         );
 
         const page = Effect.fn("Lark.page")(function* (args: ReadonlyArray<string>) {
-          return yield* Effect.scoped(
-            Effect.gen(function* () {
-              const child = yield* spawner.spawn(command(["api", "GET", ...args, "--as", "bot"]));
-              const [stdout, stderr, code] = yield* Effect.all(
-                [
-                  child.stdout.pipe(Stream.decodeText(), Stream.mkString),
-                  child.stderr.pipe(Stream.decodeText(), Stream.mkString),
-                  child.exitCode,
-                ],
-                { concurrency: "unbounded" },
-              );
-              if (code !== 0) {
-                return yield* Effect.fail(new LarkError({ operation: "history", cause: { code, stderr } }));
-              }
-              return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Page))(stdout);
-            }),
+          const child = yield* spawner.spawn(command(["api", "GET", ...args, "--as", "bot"]));
+          const [stdout, stderr, code] = yield* Effect.all(
+            [
+              child.stdout.pipe(Stream.decodeText(), Stream.mkString),
+              child.stderr.pipe(Stream.decodeText(), Stream.mkString),
+              child.exitCode,
+            ],
+            { concurrency: "unbounded" },
           );
-        });
+          if (code !== 0) {
+            return yield* Effect.fail(new LarkError({ operation: "history", cause: { code, stderr } }));
+          }
+          return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Page))(stdout);
+        }, Effect.scoped);
 
         const history = Effect.fn("Lark.history")(
           function* (root: Root): Effect.fn.Return<History, unknown> {
